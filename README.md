@@ -218,7 +218,7 @@ openssl rand -hex 32
 
 El algoritmo está fijado en `HS256` en el código de ambos servicios; no se toma de una variable de entorno. `auth-service` firma con `iss=auth-service` y `aud=business-service`, y ambos servicios validan explícitamente el algoritmo, el emisor, la audiencia y la expiración. El secreto debe tener al menos 32 bytes; un valor más corto impide el arranque.
 
-Se eligió HS256 porque hay un único emisor, dos servicios internos y un secreto compartido que nunca llega al frontend; es suficiente para el alcance de la prueba y evita la gestión de claves asimétricas. RS256 sería una mejora válida si se quisiera separar la capacidad de firma de la de verificación, pero no es un requisito de `Prueba.md`.
+Se eligió HS256 porque hay un único emisor, dos servicios internos y un secreto compartido que nunca llega al frontend; es suficiente para el alcance de la prueba y evita la gestión de claves asimétricas. RS256 sería una mejora válida si se quisiera separar la capacidad de firma de la de verificación.
 
 Para rotar el secreto se debe cambiar el valor en `auth-service` y `business-service` a la vez. Los tokens emitidos antes del cambio dejan de ser válidos y los usuarios deben iniciar sesión de nuevo.
 
