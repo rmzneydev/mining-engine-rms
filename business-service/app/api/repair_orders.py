@@ -1,19 +1,21 @@
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
-import uuid
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models import RepairOrder, Engine, Client, RepairOrderStatusHistory
-from app.schemas import RepairOrderCreate, RepairOrderResponse
+from app.models import RepairOrderStatus
+from app.schemas import (
+    RepairOrderCreate,
+    RepairOrderResponse,
+    RepairOrderStatusHistoryResponse,
+    RepairOrderStatusUpdate,
+)
+from app.services import repair_order_service
 
 router = APIRouter(prefix="/repair-orders", tags=["repair-orders"])
-
-
-def generate_order_number() -> str:
-    return f"RO-{uuid.uuid4().hex[:8].upper()}"
 
 
 @router.post("/", response_model=RepairOrderResponse, status_code=status.HTTP_201_CREATED)
@@ -22,75 +24,61 @@ def create_repair_order(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    engine = db.query(Engine).filter(Engine.id == order_in.engine_id).first()
-    if not engine:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Motor no encontrado",
-        )
-
-    client = db.query(Client).filter(Client.id == engine.client_id).first()
-    if not client:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Cliente propietario del motor no encontrado",
-        )
-
-    order_number = generate_order_number()
-
-    order = RepairOrder(
-        order_number=order_number,
-        engine_id=order_in.engine_id,
-        client_id=engine.client_id,
-        problem_description=order_in.problem_description,
-        technical_diagnosis=order_in.technical_diagnosis,
-        work_performed=order_in.work_performed,
-        technician_name=order_in.technician_name,
-        estimated_delivery=order_in.estimated_delivery,
-        status=order_in.status,
-        observations=order_in.observations,
+    return repair_order_service.create_repair_order(
+        db, order_in, current_user.get("sub")
     )
-    db.add(order)
-    db.commit()
-    db.refresh(order)
-
-    history = RepairOrderStatusHistory(
-        repair_order_id=order.id,
-        previous_status=None,
-        new_status=order.status,
-        changed_by=str(current_user.get("sub")),
-        notes="Estado inicial",
-    )
-    db.add(history)
-    db.commit()
-
-    return order
 
 
 @router.get("/", response_model=List[RepairOrderResponse])
 def list_repair_orders(
-    skip: int = 0,
-    limit: int = 100,
-    status_filter: Optional[str] = None,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    status_filter: Optional[RepairOrderStatus] = Query(default=None, alias="status"),
+    client_id: Optional[UUID] = Query(default=None),
+    engine_id: Optional[UUID] = Query(default=None),
+    search: Optional[str] = Query(default=None, max_length=100),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    _current_user: dict = Depends(get_current_user),
 ):
-    query = db.query(RepairOrder)
-    if status_filter:
-        query = query.filter(RepairOrder.status == status_filter)
-    return query.offset(skip).limit(limit).all()
+    return repair_order_service.list_repair_orders(
+        db,
+        skip,
+        limit,
+        status=status_filter,
+        client_id=client_id,
+        engine_id=engine_id,
+        search=search,
+    )
+
+
+@router.get(
+    "/{order_id}/history",
+    response_model=List[RepairOrderStatusHistoryResponse],
+)
+def get_repair_order_history(
+    order_id: UUID,
+    db: Session = Depends(get_db),
+    _current_user: dict = Depends(get_current_user),
+):
+    return repair_order_service.list_status_history(db, order_id)
 
 
 @router.get("/{order_id}", response_model=RepairOrderResponse)
 def get_repair_order(
     order_id: UUID,
     db: Session = Depends(get_db),
+    _current_user: dict = Depends(get_current_user),
+):
+    return repair_order_service.get_repair_order(db, order_id)
+
+
+@router.patch("/{order_id}/status", response_model=RepairOrderResponse)
+def update_repair_order_status(
+    order_id: UUID,
+    payload: RepairOrderStatusUpdate,
+    db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    order = db.query(RepairOrder).filter(RepairOrder.id == order_id).first()
-    if not order:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Orden de reparación no encontrada",
-        )
-    return order
+    return repair_order_service.update_status(
+        db, order_id, payload, current_user.get("sub")
+    )
