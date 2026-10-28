@@ -32,7 +32,6 @@ class RepairOrderCreate(BaseModel):
     work_performed: Optional[str] = None
     technician_name: Optional[str] = Field(default=None, max_length=255)
     estimated_delivery: Optional[datetime] = None
-    status: RepairOrderStatus = RepairOrderStatus.RECEIVED
     observations: Optional[str] = None
 
 

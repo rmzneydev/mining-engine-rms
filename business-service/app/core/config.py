@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     JWT_SECRET: SecretStr
     JWT_ISSUER: str = "auth-service"
     JWT_AUDIENCE: str = "business-service"
+    SEED_DEMO_DATA: bool = False
 
     @field_validator("JWT_SECRET")
     @classmethod

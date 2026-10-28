@@ -47,7 +47,8 @@ export async function registerUser(input: RegisterInput): Promise<AuthUser> {
       name: input.name,
       email: input.email,
       passwordHash,
-      role: input.role ?? 'operator',
+      // El registro público nunca otorga privilegios; solo un admin puede promover usuarios.
+      role: 'operator',
     },
   });
 
