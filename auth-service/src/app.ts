@@ -1,5 +1,8 @@
 import express from 'express';
 import cors from 'cors';
+import authRoutes from './routes/auth.routes.js';
+import userRoutes from './routes/user.routes.js';
+import { errorHandler } from './middleware/error.handler.js';
 
 const app = express();
 
@@ -13,5 +16,10 @@ app.get('/health', (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+
+app.use(errorHandler);
 
 export default app;
