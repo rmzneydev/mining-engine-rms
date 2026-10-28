@@ -1,12 +1,15 @@
-
 import type { NextFunction, Request, Response } from 'express';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
+import { prisma } from '../config/prisma.js';
+import type { UserRole } from '../types/index.js';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
+    name: string;
     email: string;
-    role: string;
+    role: UserRole;
+    isActive: boolean;
   };
 }
 
@@ -18,11 +21,11 @@ if (!jwtSecret) {
 
 const secret: string = jwtSecret;
 
-export function authenticate(
+export async function authenticate(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
-): void {
+): Promise<void> {
   const authorization = req.headers.authorization;
 
   if (!authorization?.startsWith('Bearer ')) {
@@ -32,29 +35,42 @@ export function authenticate(
 
   const token = authorization.slice(7);
 
+  let payload: JwtPayload;
   try {
-    const payload = jwt.verify(token, secret);
-
-    if (
-      typeof payload === 'string' ||
-      typeof (payload as JwtPayload).sub !== 'string' ||
-      typeof (payload as JwtPayload).email !== 'string' ||
-      typeof (payload as JwtPayload).role !== 'string'
-    ) {
+    const verified = jwt.verify(token, secret);
+    if (typeof verified === 'string') {
       res.status(401).json({ message: 'Invalid authentication token' });
       return;
     }
+    payload = verified;
+  } catch {
+    res.status(401).json({ message: 'Invalid or expired token' });
+    return;
+  }
 
-    const claims = payload as JwtPayload;
+  if (typeof payload.sub !== 'string') {
+    res.status(401).json({ message: 'Invalid authentication token' });
+    return;
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+
+    if (!user || !user.isActive) {
+      res.status(401).json({ message: 'Invalid or inactive user' });
+      return;
+    }
 
     req.user = {
-      id: claims.sub as string,
-      email: claims.email as string,
-      role: claims.role as string,
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role as UserRole,
+      isActive: user.isActive,
     };
 
     next();
-  } catch {
-    res.status(401).json({ message: 'Invalid or expired token' });
+  } catch (error) {
+    next(error);
   }
 }

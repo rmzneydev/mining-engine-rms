@@ -22,4 +22,12 @@ export interface AuthUser {
   name: string;
   email: string;
   role: UserRole;
+  isActive: boolean;
+}
+
+export interface UpdateUserInput {
+  name?: string;
+  email?: string;
+  role?: UserRole;
+  isActive?: boolean;
 }

@@ -4,9 +4,9 @@ import { registerUser, loginUser } from '../services/auth.service.js';
 import type { AuthUser } from '../types/index.js';
 
 const registerSchema = z.object({
-  name: z.string().min(2, 'El nombre es requerido'),
-  email: z.string().email('El correo electrónico no tiene un formato válido'),
-  password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
+  name: z.string().min(2, 'El nombre es requerido').max(120),
+  email: z.string().email('El correo electrónico no tiene un formato válido').max(255),
+  password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres').max(72),
   role: z.enum(['admin', 'operator']).optional(),
 });
 
