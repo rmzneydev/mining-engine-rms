@@ -1,38 +1,19 @@
-import swaggerJSDoc from 'swagger-jsdoc';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import swaggerUi from 'swagger-ui-express';
 import type { Express } from 'express';
+import { buildSwaggerSpec } from './swagger-spec.js';
 
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Mining Engine RMS - Auth Service',
-      version: '1.0.0',
-      description: 'API de autenticación y administración de usuarios (Express + TypeScript)',
-    },
-    servers: [
-      {
-        url: 'http://localhost:3001',
-        description: 'Servidor de desarrollo local',
-      },
-    ],
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT',
-          description: 'Token JWT emitido por /api/auth/login',
-        },
-      },
-    },
-    security: [{ bearerAuth: [] }],
-  },
-  apis: ['./src/routes/*.ts', './src/docs/*.ts'],
-};
-
-const swaggerSpec = swaggerJSDoc(swaggerOptions);
+// En producción (dist/) se sirve la spec generada en el build (openapi.json),
+// porque src/ no existe en la imagen. En desarrollo se genera desde src/.
+function loadSpec(): object {
+  const prebuilt = fileURLToPath(new URL('../openapi.json', import.meta.url));
+  if (existsSync(prebuilt)) {
+    return JSON.parse(readFileSync(prebuilt, 'utf-8'));
+  }
+  return buildSwaggerSpec();
+}
 
 export function setupSwagger(app: Express): void {
-  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(loadSpec()));
 }
