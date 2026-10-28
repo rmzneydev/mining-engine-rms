@@ -1,19 +1,19 @@
-
 services:
   postgres:
     image: postgres:16-alpine
     container_name: mining-engine-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: mining_engine
+      POSTGRES_DB: postgres
       POSTGRES_USER: mining_user
       POSTGRES_PASSWORD: mining_dev_password
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mining_user -d mining_engine"]
+      test: ["CMD-SHELL", "pg_isready -U mining_user -d postgres"]
       interval: 5s
       timeout: 3s
       retries: 10
