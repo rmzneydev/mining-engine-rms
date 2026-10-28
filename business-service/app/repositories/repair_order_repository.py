@@ -5,7 +5,13 @@ from uuid import UUID
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.models import Engine, RepairOrder, RepairOrderStatus, RepairOrderStatusHistory
+from app.models import (
+    Client,
+    Engine,
+    RepairOrder,
+    RepairOrderStatus,
+    RepairOrderStatusHistory,
+)
 
 
 def _with_relations(query):
@@ -42,10 +48,15 @@ def list_all(
         query = query.filter(RepairOrder.engine_id == engine_id)
     if search:
         pattern = f"%{search}%"
-        query = query.join(Engine, RepairOrder.engine_id == Engine.id).filter(
-            or_(
-                RepairOrder.order_number.ilike(pattern),
-                Engine.serial_number.ilike(pattern),
+        query = (
+            query.join(Engine, RepairOrder.engine_id == Engine.id)
+            .join(Client, RepairOrder.client_id == Client.id)
+            .filter(
+                or_(
+                    RepairOrder.order_number.ilike(pattern),
+                    Engine.serial_number.ilike(pattern),
+                    Client.name.ilike(pattern),
+                )
             )
         )
 
