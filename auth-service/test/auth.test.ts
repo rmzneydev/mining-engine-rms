@@ -176,6 +176,39 @@ describe('GET /api/auth/me', () => {
     expect(missing.status).toBe(401);
     expect(tampered.status).toBe(401);
   });
+
+  it('rejects tokens signed with another algorithm or issuer', async () => {
+    const wrongAlgorithm = jwt.sign(
+      { sub: 'user-id', email: ADMIN.email, role: ADMIN.role },
+      JWT_SECRET,
+      {
+        algorithm: 'HS512',
+        expiresIn: '1h',
+        issuer: 'auth-service',
+        audience: 'business-service',
+      },
+    );
+    const wrongIssuer = jwt.sign(
+      { sub: 'user-id', email: ADMIN.email, role: ADMIN.role },
+      JWT_SECRET,
+      {
+        algorithm: 'HS256',
+        expiresIn: '1h',
+        issuer: 'another-service',
+        audience: 'business-service',
+      },
+    );
+
+    const algorithmResponse = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${wrongAlgorithm}`);
+    const issuerResponse = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${wrongIssuer}`);
+
+    expect(algorithmResponse.status).toBe(401);
+    expect(issuerResponse.status).toBe(401);
+  });
 });
 
 describe('user administration', () => {

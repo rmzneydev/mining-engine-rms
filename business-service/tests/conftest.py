@@ -41,7 +41,6 @@ _ensure_test_database()
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["JWT_SECRET"] = TEST_SECRET
-os.environ["JWT_ALGORITHM"] = "HS256"
 os.environ["JWT_ISSUER"] = TEST_ISSUER
 os.environ["JWT_AUDIENCE"] = TEST_AUDIENCE
 

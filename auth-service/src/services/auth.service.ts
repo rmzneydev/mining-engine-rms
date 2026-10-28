@@ -1,6 +1,6 @@
 import { prisma } from '../config/prisma.js';
+import { JWT_EXPIRES_IN, signAccessToken, verifyAccessToken } from '../config/jwt.js';
 import { compare, hash } from 'bcryptjs';
-import jwt, { type SignOptions } from 'jsonwebtoken';
 import type {
   RegisterInput,
   LoginInput,
@@ -9,13 +9,6 @@ import type {
   UserRole,
   UpdateUserInput,
 } from '../types/index.js';
-
-const JWT_SECRET: string = process.env.JWT_SECRET!;
-const JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN ?? '1h';
-
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET is not configured');
-}
 
 interface UserRecord {
   id: string;
@@ -86,11 +79,9 @@ export function generateTokens(user: AuthUser): AuthTokens {
     sub: user.id,
     email: user.email,
     role: user.role,
-    iss: 'auth-service',
-    aud: 'business-service',
   };
 
-  const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN } as SignOptions);
+  const accessToken = signAccessToken(payload);
 
   return {
     accessToken,
@@ -99,7 +90,13 @@ export function generateTokens(user: AuthUser): AuthTokens {
 }
 
 export function verifyToken(token: string): { sub: string; email: string; role: string; iss: string; aud: string } {
-  const payload = jwt.verify(token, JWT_SECRET) as Record<string, unknown>;
+  let payload: Record<string, unknown>;
+
+  try {
+    payload = verifyAccessToken(token) as Record<string, unknown>;
+  } catch {
+    throw httpError('Token inválido', 401);
+  }
 
   if (
     typeof payload.sub !== 'string' ||

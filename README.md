@@ -198,7 +198,7 @@ Variables principales del archivo `.env` raíz:
 | `AUTH_DB_PASSWORD` | Sí | Contraseña del usuario técnico de auth-service |
 | `BUSINESS_DB_NAME`, `BUSINESS_DB_USER` | No | Base lógica y usuario técnico de business-service |
 | `BUSINESS_DB_PASSWORD` | Sí | Contraseña del usuario técnico de business-service |
-| `JWT_SECRET` | Sí | Secreto compartido para firmar y verificar JWT |
+| `JWT_SECRET` | Sí | Secreto HS256 compartido; mínimo 32 bytes |
 | `ADMIN_NAME`, `ADMIN_EMAIL` | No | Datos del administrador inicial |
 | `ADMIN_PASSWORD` | Sí | Contraseña del administrador inicial |
 | `VITE_AUTH_API_URL` | No | URL del auth-service compilada en el frontend |
@@ -214,7 +214,13 @@ openssl rand -hex 32
 
 - **Local:** copiar el valor en `auth-service/.env` y `business-service/.env`; debe ser idéntico en ambos porque HS256 firma y verifica con la misma clave.
 - **Docker Compose:** definirlo en el `.env` raíz; Compose lo inyecta en los dos contenedores.
-- **CI/CD:** en GitHub Actions se usa un secreto de pruebas dedicado. Para un despliegue real, definir `JWT_SECRET` como GitHub Actions secret o variable del proveedor y no versionarlo.
+- **CI/CD:** las pruebas backend definen su propio secreto de pruebas en `setup`/`conftest`; el workflow no contiene un secreto real. Para un despliegue real, definir `JWT_SECRET` como GitHub Actions secret o variable del proveedor y no versionarlo.
+
+El algoritmo está fijado en `HS256` en el código de ambos servicios; no se toma de una variable de entorno. `auth-service` firma con `iss=auth-service` y `aud=business-service`, y ambos servicios validan explícitamente el algoritmo, el emisor, la audiencia y la expiración. El secreto debe tener al menos 32 bytes; un valor más corto impide el arranque.
+
+Se eligió HS256 porque hay un único emisor, dos servicios internos y un secreto compartido que nunca llega al frontend; es suficiente para el alcance de la prueba y evita la gestión de claves asimétricas. RS256 sería una mejora válida si se quisiera separar la capacidad de firma de la de verificación, pero no es un requisito de `Prueba.md`.
+
+Para rotar el secreto se debe cambiar el valor en `auth-service` y `business-service` a la vez. Los tokens emitidos antes del cambio dejan de ser válidos y los usuarios deben iniciar sesión de nuevo.
 
 ### Inicialización de PostgreSQL
 
@@ -324,18 +330,18 @@ Borrados protegidos: no se elimina un cliente con motores ni un motor con órden
 ## Pruebas
 
 ```bash
-# Auth: 13 pruebas
+# Auth: 14 pruebas
 cd auth-service && npm test
 
-# Business: 9 pruebas
+# Business: 10 pruebas
 cd business-service && python -m pytest
 
 # Frontend: 18 pruebas
 cd frontend && npm test
 ```
 
-- **Auth:** aprovisiona `auth_test_db` con `mining_user`, aplica las migraciones SQL y limpia `users` antes de cada prueba. Cubre registro, validación, login, claims del JWT, `/me`, autorización por rol, desactivación y auto-protección del administrador.
-- **Business:** aprovisiona `business_test_db` antes de importar la app y trunca las tablas antes de cada prueba. Cubre CRUD, duplicados, referencias, filtros, búsqueda, transiciones válidas e inválidas, historial y guardas de borrado.
+- **Auth:** aprovisiona `auth_test_db` con `mining_user`, aplica las migraciones SQL y limpia `users` antes de cada prueba. Cubre registro, validación, login, claims del JWT, `/me`, autorización por rol, desactivación, auto-protección del administrador y rechazo de algoritmos o emisores incorrectos.
+- **Business:** aprovisiona `business_test_db` antes de importar la app y trunca las tablas antes de cada prueba. Cubre CRUD, duplicados, referencias, filtros, búsqueda, transiciones válidas e inválidas, historial, guardas de borrado y rechazo de tokens inválidos, expirados, con emisor o algoritmo incorrectos.
 - **Frontend:** Vitest + Testing Library + jsdom. Cubre formato, estados, badges, guardas de ruta y login (validación, envío y error de API).
 
 Requisito para las pruebas backend: PostgreSQL disponible en `localhost:5432` con el usuario `mining_user` (por ejemplo, `docker compose up -d postgres`). Las bases de prueba se crean automáticamente y no tocan `auth_db` ni `business_db`. Si se cambia la contraseña de `mining_user`, definir `TEST_ADMIN_DATABASE_URL` y `TEST_DATABASE_URL` antes de ejecutar las pruebas.
@@ -357,7 +363,7 @@ Cada job usa su propio PostgreSQL 16 como service container. El job final crea u
 ## Decisiones de diseño
 
 - **Dos servicios, dos bases lógicas:** separa el ciclo de vida de identidad y negocio. Los usuarios técnicos no tienen acceso cruzado.
-- **JWT compartido:** evita llamadas sincrónicas entre servicios en cada request. El costo es que una desactivación tarda como máximo lo que reste del token en el business-service; `auth-service` sí revalida contra la base en cada request autenticado.
+- **JWT compartido con HS256:** evita llamadas sincrónicas entre servicios en cada request. El algoritmo está fijado y el secreto se valida al arrancar. El costo es que una desactivación tarda como máximo lo que reste del token en el business-service; `auth-service` sí revalida contra la base en cada request autenticado.
 - **Historial append-only:** conserva trazabilidad completa de cada transición, incluyendo notas y autor.
 - **Reglas en el servicio, no en la base:** las transiciones se validan en Python para devolver errores claros. La base mantiene constraints de unicidad y claves foráneas.
 - **Sin librería de estado en el frontend:** el estado de sesión vive en un contexto pequeño y los datos se obtienen con `fetch`. Es suficiente para el alcance y reduce dependencias.
@@ -369,6 +375,7 @@ Cada job usa su propio PostgreSQL 16 como service container. El job final crea u
 
 - Contraseñas con bcrypt (costo 10); nunca se serializa `password_hash`.
 - Las credenciales de bases de datos viven en `.env`; `docker-compose.yml` solo las referencia y no contiene contraseñas literales.
+- El secreto JWT es obligatorio, de al menos 32 bytes y nunca tiene un valor por defecto en el backend. Solo se acepta el algoritmo HS256 y se validan emisor y audiencia.
 - Validación de entrada con Zod y Pydantic; errores de validación con detalle por campo.
 - Roles `admin` y `operator`; las rutas de administración están protegidas en backend y en el frontend.
 - El registro público está disponible por requisito. El frontend no expone creación de usuarios: solo el administrador gestiona roles y estado.

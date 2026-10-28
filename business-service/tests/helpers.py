@@ -3,7 +3,7 @@ from typing import Optional
 
 import jwt
 
-TEST_SECRET = "test_secret_for_business_service_1234567890"
+TEST_SECRET = "test_secret_for_business_service_1234567890_abcdefghijklmnopqrstuvwxyz"
 TEST_ISSUER = "auth-service"
 TEST_AUDIENCE = "business-service"
 TEST_USER_ID = "11111111-1111-1111-1111-111111111111"
@@ -17,6 +17,7 @@ def make_token(
     audience: str = TEST_AUDIENCE,
     secret: str = TEST_SECRET,
     expires_in: int = 3600,
+    algorithm: str = "HS256",
 ) -> str:
     payload = {
         "sub": sub,
@@ -26,7 +27,7 @@ def make_token(
         "aud": audience,
         "exp": datetime.now(timezone.utc) + timedelta(seconds=expires_in),
     }
-    return jwt.encode(payload, secret, algorithm="HS256")
+    return jwt.encode(payload, secret, algorithm=algorithm)
 
 
 def auth_headers(token: Optional[str] = None) -> dict:

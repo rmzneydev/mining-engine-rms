@@ -4,6 +4,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.config import settings
 
 security = HTTPBearer(auto_error=False)
+JWT_ALGORITHM = "HS256"
+JWT_SECRET = settings.JWT_SECRET.get_secret_value()
 
 
 def verify_jwt_token(token: str) -> dict:
@@ -11,8 +13,8 @@ def verify_jwt_token(token: str) -> dict:
     try:
         payload = jwt.decode(
             token,
-            settings.JWT_SECRET,
-            algorithms=[settings.JWT_ALGORITHM],
+            JWT_SECRET,
+            algorithms=[JWT_ALGORITHM],
             issuer=settings.JWT_ISSUER,
             audience=settings.JWT_AUDIENCE,
         )

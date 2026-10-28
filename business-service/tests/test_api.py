@@ -77,6 +77,21 @@ def test_protected_routes_reject_missing_invalid_and_expired_tokens(api: TestCli
     )
 
 
+def test_protected_routes_reject_wrong_issuer_and_algorithm(api: TestClient) -> None:
+    assert (
+        api.get(
+            "/clients/", headers=auth_headers(make_token(issuer="another-service"))
+        ).status_code
+        == 401
+    )
+    assert (
+        api.get(
+            "/clients/", headers=auth_headers(make_token(algorithm="HS512"))
+        ).status_code
+        == 401
+    )
+
+
 def test_client_crud_and_duplicate_validation(api: TestClient, headers: dict) -> None:
     client = create_client(api, headers)
 

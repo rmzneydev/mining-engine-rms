@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import jwt, { type JwtPayload } from 'jsonwebtoken';
+import { verifyAccessToken } from '../config/jwt.js';
 import { prisma } from '../config/prisma.js';
 import type { UserRole } from '../types/index.js';
 
@@ -12,14 +12,6 @@ export interface AuthenticatedRequest extends Request {
     isActive: boolean;
   };
 }
-
-const jwtSecret = process.env.JWT_SECRET;
-
-if (!jwtSecret) {
-  throw new Error('JWT_SECRET is not configured');
-}
-
-const secret: string = jwtSecret;
 
 export async function authenticate(
   req: AuthenticatedRequest,
@@ -35,14 +27,9 @@ export async function authenticate(
 
   const token = authorization.slice(7);
 
-  let payload: JwtPayload;
+  let payload: ReturnType<typeof verifyAccessToken>;
   try {
-    const verified = jwt.verify(token, secret);
-    if (typeof verified === 'string') {
-      res.status(401).json({ message: 'Invalid authentication token' });
-      return;
-    }
-    payload = verified;
+    payload = verifyAccessToken(token);
   } catch {
     res.status(401).json({ message: 'Invalid or expired token' });
     return;
