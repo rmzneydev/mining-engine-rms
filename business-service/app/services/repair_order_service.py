@@ -41,7 +41,7 @@ def create_repair_order(
 
     payload = data.model_dump()
     payload["order_number"] = generate_order_number()
-    payload["status"] = data.status.value
+    payload["status"] = RepairOrderStatus.RECEIVED.value
     payload["client_id"] = engine.client_id
 
     return repair_order_repository.create_with_initial_history(

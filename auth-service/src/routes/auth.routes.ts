@@ -6,7 +6,8 @@ import { authenticate } from '../middleware/authenticate.js';
  * @swagger
  * /api/auth/register:
  *   post:
- *     summary: Registrar un nuevo usuario
+ *     summary: Registrar un nuevo usuario con rol operator
+ *     description: El rol siempre es operator; solo un administrador puede cambiarlo desde /api/users/{id}/role.
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -28,10 +29,6 @@ import { authenticate } from '../middleware/authenticate.js';
  *               password:
  *                 type: string
  *                 example: Minero2024!
- *               role:
- *                 type: string
- *                 enum: [admin, operator]
- *                 example: admin
  *     responses:
  *       201:
  *         description: Usuario registrado exitosamente

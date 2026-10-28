@@ -17,9 +17,18 @@ async function register(payload: Record<string, unknown>) {
   return request(app).post('/api/auth/register').send(payload);
 }
 
-async function createAndLogin(user = ADMIN) {
-  const registration = await register(user);
+async function createUser(user: { name: string; email: string; password: string; role: string }) {
+  const { role, ...payload } = user;
+  const registration = await register(payload);
   expect(registration.status).toBe(201);
+
+  if (role === 'admin') {
+    await prisma.user.update({ where: { email: user.email }, data: { role: 'admin' } });
+  }
+}
+
+async function createAndLogin(user = ADMIN) {
+  await createUser(user);
 
   const login = await request(app)
     .post('/api/auth/login')
@@ -67,6 +76,18 @@ describe('POST /api/auth/register', () => {
     expect(response.body.user).not.toHaveProperty('passwordHash');
   });
 
+  it('ignores a requested admin role on public registration', async () => {
+    const response = await register({
+      name: 'Intruso',
+      email: 'intruder@test.com',
+      password: 'secret123',
+      role: 'admin',
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body.user.role).toBe('operator');
+  });
+
   it('rejects duplicated emails', async () => {
     await register({ name: 'Admin', email: 'duplicate@test.com', password: 'secret123' });
     const response = await register({
@@ -96,7 +117,7 @@ describe('POST /api/auth/register', () => {
 
 describe('POST /api/auth/login', () => {
   it('returns a signed JWT with identity and authorization claims', async () => {
-    await register(ADMIN);
+    await createUser(ADMIN);
     const response = await request(app)
       .post('/api/auth/login')
       .send({ email: ADMIN.email, password: ADMIN.password });
@@ -116,7 +137,7 @@ describe('POST /api/auth/login', () => {
   });
 
   it('rejects invalid credentials with the same message', async () => {
-    await register(ADMIN);
+    await createUser(ADMIN);
 
     const wrongPassword = await request(app)
       .post('/api/auth/login')

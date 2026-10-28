@@ -211,6 +211,10 @@ def test_create_order_derives_client_and_initial_history(
     assert entries[0]["new_status"] == "received"
     assert entries[0]["changed_by"] == TEST_USER_ID
 
+    forced_status = create_order(api, headers, engine["id"], status="delivered")
+    assert forced_status["status"] == "received"
+    assert forced_status["actual_delivery"] is None
+
     missing_engine = api.post(
         "/repair-orders/",
         headers=headers,

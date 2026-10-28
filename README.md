@@ -57,11 +57,8 @@ erDiagram
         varchar identification_type
         varchar identification_number UK
         varchar email
-        varchar phone
-        text address
         boolean is_active
         timestamptz created_at
-        timestamptz updated_at
     }
 
     ENGINES {
@@ -74,7 +71,6 @@ erDiagram
         uuid client_id FK
         boolean is_active
         timestamptz created_at
-        timestamptz updated_at
     }
 
     REPAIR_ORDERS {
@@ -89,6 +85,7 @@ erDiagram
         timestamptz estimated_delivery
         timestamptz actual_delivery
         varchar status
+        text observations
         timestamptz received_at
         timestamptz created_at
         timestamptz updated_at
@@ -100,7 +97,7 @@ erDiagram
         varchar previous_status
         varchar new_status
         text notes
-        uuid changed_by
+        varchar changed_by
         timestamptz changed_at
     }
 
@@ -110,7 +107,7 @@ erDiagram
     REPAIR_ORDERS ||--o{ REPAIR_ORDER_STATUS_HISTORY : registra
 ```
 
-`changed_by` guarda el claim `sub` del JWT; no es una clave foránea porque la identidad vive en otra base.
+`changed_by` guarda el claim `sub` del JWT; no es una clave foránea porque la identidad vive en otra base. Es `NULL` en los registros creados por el seed de demostración (la interfaz lo muestra como "Sistema").
 
 ## Flujo de estados
 
@@ -130,10 +127,11 @@ stateDiagram-v2
 
 Reglas aplicadas en el servicio de negocio:
 
+- Toda orden nace en `received`; el endpoint de creación no acepta un estado inicial.
 - No se permite repetir el estado actual.
 - No se permiten saltos fuera del grafo anterior.
 - Cada transición inserta un registro append-only en `repair_order_status_history`.
-- Al pasar a `delivered` se completa `actual_delivery` si el cliente no lo envió.
+- Al pasar a `delivered` el servicio registra `actual_delivery` con la fecha y hora del cambio; no se recibe desde el cliente.
 
 ## Estructura
 
@@ -186,7 +184,7 @@ admin@test.com / 123456
 
 `ADMIN_EMAIL` y `ADMIN_PASSWORD` se pueden cambiar en el `.env` raíz.
 
-El contenedor de autenticación aplica `prisma migrate deploy` y ejecuta un seed idempotente antes de arrancar Express. El contenedor de negocio crea sus tablas al importar la aplicación.
+El contenedor de autenticación aplica `prisma migrate deploy` y ejecuta un seed idempotente antes de arrancar Express. El contenedor de negocio crea sus tablas y, si `SEED_DEMO_DATA=true` (valor de `.env.example`), carga datos de demostración: 3 clientes, 5 motores y 7 órdenes, una por cada estado, con su historial de transiciones. El seed solo se ejecuta si `business_db` no tiene clientes, así que reiniciar el contenedor no duplica datos. Para arrancar con la base vacía, definir `SEED_DEMO_DATA=false` antes de crear el volumen.
 
 Variables principales del archivo `.env` raíz:
 
@@ -201,6 +199,7 @@ Variables principales del archivo `.env` raíz:
 | `JWT_SECRET` | Sí | Secreto HS256 compartido; mínimo 32 bytes |
 | `ADMIN_NAME`, `ADMIN_EMAIL` | No | Datos del administrador inicial |
 | `ADMIN_PASSWORD` | Sí | Contraseña del administrador inicial |
+| `SEED_DEMO_DATA` | No | `true` carga datos de demostración en `business_db` si está vacía (por defecto `false` en el compose) |
 | `VITE_AUTH_API_URL` | No | URL del auth-service compilada en el frontend |
 | `VITE_BUSINESS_API_URL` | No | URL del business-service compilada en el frontend |
 
@@ -266,6 +265,7 @@ python -m venv .venv
 .venv/Scripts/activate
 pip install -r requirements.txt
 cp .env.example .env
+python -m app.seed  # opcional, requiere SEED_DEMO_DATA=true en .env
 uvicorn app.main:app --reload --port 8002
 ```
 
@@ -277,6 +277,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
+python -m app.seed  # opcional, requiere SEED_DEMO_DATA=true en .env
 uvicorn app.main:app --reload --port 8002
 ```
 
@@ -297,7 +298,7 @@ Todas las rutas del business-service (excepto `/health`) requieren `Authorizatio
 
 | Método | Ruta | Acceso | Descripción |
 | --- | --- | --- | --- |
-| POST | `/api/auth/register` | Público | Registra un usuario (`operator` por defecto) |
+| POST | `/api/auth/register` | Público | Registra un usuario, siempre con rol `operator` |
 | POST | `/api/auth/login` | Público | Devuelve usuario y tokens |
 | GET | `/api/auth/me` | Autenticado | Usuario del token |
 | GET | `/api/users` | Admin | Lista usuarios |
@@ -318,7 +319,7 @@ Un administrador no puede desactivarse ni quitarse el rol a sí mismo.
 | GET/PUT/DELETE | `/clients/{id}` | Consulta / actualiza / elimina |
 | POST/GET | `/engines/` | Crea / lista motores (`?client_id=`) |
 | GET/PUT/DELETE | `/engines/{id}` | Consulta / actualiza / elimina |
-| POST/GET | `/repair-orders/` | Crea / lista órdenes |
+| POST/GET | `/repair-orders/` | Crea (siempre en `received`) / lista órdenes |
 | GET | `/repair-orders/{id}` | Detalle con cliente y motor |
 | PATCH | `/repair-orders/{id}/status` | Cambia estado y registra historial |
 | GET | `/repair-orders/{id}/history` | Historial de estados |
@@ -330,7 +331,7 @@ Borrados protegidos: no se elimina un cliente con motores ni un motor con órden
 ## Pruebas
 
 ```bash
-# Auth: 14 pruebas
+# Auth: 15 pruebas
 cd auth-service && npm test
 
 # Business: 10 pruebas
@@ -378,7 +379,7 @@ Cada job usa su propio PostgreSQL 16 como service container. El job final crea u
 - El secreto JWT es obligatorio, de al menos 32 bytes y nunca tiene un valor por defecto en el backend. Solo se acepta el algoritmo HS256 y se validan emisor y audiencia.
 - Validación de entrada con Zod y Pydantic; errores de validación con detalle por campo.
 - Roles `admin` y `operator`; las rutas de administración están protegidas en backend y en el frontend.
-- El registro público está disponible por requisito. El frontend no expone creación de usuarios: solo el administrador gestiona roles y estado.
+- El registro público está disponible por requisito y siempre asigna el rol `operator`; un campo `role` en la petición se ignora. El frontend no expone creación de usuarios: solo el administrador gestiona roles y estado.
 - CORS está abierto para facilitar la demo; restringirlo a los orígenes reales en producción.
 - No hay refresh token ni revocación distribuida. El token dura una hora y el business-service no consulta sesiones.
 - Las tablas del business-service se crean con `metadata.create_all`; para evolución de esquema en producción convendría incorporar Alembic.
