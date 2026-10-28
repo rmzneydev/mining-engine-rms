@@ -1,9 +1,10 @@
 import { Router } from 'express';
-import { getUsers, updateUser, authenticate } from '../controllers/user.controller.js';
+import { UserController, authenticate } from '../controllers/user.controller.js';
 
+const userController = new UserController();
 const router = Router();
 
-router.get('/', authenticate, getUsers);
-router.patch('/:id/role', authenticate, updateUser);
+router.get('/', authenticate, userController.getUsers);
+router.patch('/:id/role', authenticate, userController.updateUser);
 
 export default router;

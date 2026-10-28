@@ -3,6 +3,7 @@ import cors from 'cors';
 import authRoutes from './routes/auth.routes.js';
 import userRoutes from './routes/user.routes.js';
 import { errorHandler } from './middleware/error.handler.js';
+import { setupSwagger } from './config/swagger.js';
 
 const app = express();
 
@@ -19,6 +20,8 @@ app.get('/health', (_req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+
+setupSwagger(app);
 
 app.use(errorHandler);
 
